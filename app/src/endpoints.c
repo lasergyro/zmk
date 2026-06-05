@@ -319,18 +319,23 @@ static bool is_ble_ready(void) {
 }
 
 static enum zmk_transport get_selected_transport(void) {
-    if (is_ble_ready()) {
-        if (is_usb_ready()) {
-            LOG_DBG("Both endpoint transports are ready. Using %d", preferred_transport);
-            return preferred_transport;
-        }
+    if (preferred_transport == ZMK_TRANSPORT_BLE) {
+        LOG_DBG("Preferred transport is BLE. Using BLE.");
+        return ZMK_TRANSPORT_BLE;
+    }
 
-        LOG_DBG("Only BLE is ready.");
+    if (preferred_transport == ZMK_TRANSPORT_USB && is_usb_ready()) {
+        LOG_DBG("Preferred transport is USB and USB is ready. Using USB.");
+        return ZMK_TRANSPORT_USB;
+    }
+
+    if (is_ble_ready()) {
+        LOG_DBG("Fallback to BLE.");
         return ZMK_TRANSPORT_BLE;
     }
 
     if (is_usb_ready()) {
-        LOG_DBG("Only USB is ready.");
+        LOG_DBG("Fallback to USB.");
         return ZMK_TRANSPORT_USB;
     }
 
