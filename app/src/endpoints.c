@@ -202,8 +202,17 @@ static int send_generic_desktop_report(void) {
     }
 
     case ZMK_TRANSPORT_BLE: {
-        // HOG generic desktop not implemented yet, just ignore for now
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+        struct zmk_hid_generic_desktop_report *generic_desktop_report = zmk_hid_get_generic_desktop_report();
+        int err = zmk_hog_send_generic_desktop_report(&generic_desktop_report->body);
+        if (err) {
+            LOG_ERR("FAILED TO SEND OVER HOG: %d", err);
+        }
+        return err;
+#else
+        LOG_ERR("BLE HOG endpoint is not supported");
         return -ENOTSUP;
+#endif /* IS_ENABLED(CONFIG_ZMK_BLE) */
     }
     }
 
