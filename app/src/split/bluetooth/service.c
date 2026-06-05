@@ -221,7 +221,7 @@ void send_position_state_callback(struct k_work *work) {
     while (k_msgq_peek(&position_state_msgq, &state) == 0) {
         int err = bt_gatt_notify(NULL, &split_svc.attrs[1], &state, sizeof(state));
         if (err == -ENOMEM || err == -EAGAIN) {
-            k_work_submit_to_queue(&service_work_q, &service_position_notify_work);
+            k_work_submit_to_queue(&service_work_q, work);
             return;
         } else if (err) {
             LOG_DBG("Error notifying %d", err);
