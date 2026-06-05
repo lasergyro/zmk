@@ -350,7 +350,7 @@ static int zmk_split_bt_report_input(uint8_t reg, uint8_t type, uint16_t code, i
         .sync = sync ? 1 : 0,
     };
 
-    struct bt_gatt_attr *attr = NULL;
+    const struct bt_gatt_attr *attr = NULL;
     for (size_t i = 0; i < split_svc.attr_count; i++) {
         if (bt_uuid_cmp(split_svc.attrs[i].uuid,
                         BT_UUID_DECLARE_128(ZMK_SPLIT_BT_INPUT_EVENT_UUID)) == 0 &&

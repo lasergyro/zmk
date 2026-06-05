@@ -46,7 +46,7 @@ static int kscan_mock_configure(const struct device *dev, kscan_callback_t callb
 
 #define MOCK_INST_INIT(n)                                                                          \
     struct kscan_mock_config_##n {                                                                 \
-        uint32_t events[DT_INST_PROP_LEN(n, events)];                                              \
+        uint32_t events[(DT_INST_PROP_LEN(n, events) == 0) ? 1 : DT_INST_PROP_LEN(n, events)];     \
         bool exit_after;                                                                           \
     };                                                                                             \
     static void kscan_mock_schedule_next_event_##n(const struct device *dev) {                     \
