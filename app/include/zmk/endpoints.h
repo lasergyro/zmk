@@ -63,6 +63,9 @@ int zmk_endpoint_instance_to_index(struct zmk_endpoint_instance endpoint);
 int zmk_endpoints_select_transport(enum zmk_transport transport);
 int zmk_endpoints_toggle_transport(void);
 
+void zmk_endpoints_debug_override_transport(enum zmk_transport transport);
+void zmk_endpoints_clear_debug_override(void);
+
 /**
  * Gets the currently-selected endpoint.
  */

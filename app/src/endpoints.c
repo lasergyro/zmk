@@ -318,24 +318,38 @@ static bool is_ble_ready(void) {
 #endif
 }
 
-static enum zmk_transport get_selected_transport(void) {
-    if (preferred_transport == ZMK_TRANSPORT_BLE) {
-        LOG_DBG("Preferred transport is BLE. Using BLE.");
-        return ZMK_TRANSPORT_BLE;
-    }
+static bool debug_transport_override = false;
+static enum zmk_transport debug_transport = ZMK_TRANSPORT_USB;
 
-    if (preferred_transport == ZMK_TRANSPORT_USB && is_usb_ready()) {
-        LOG_DBG("Preferred transport is USB and USB is ready. Using USB.");
-        return ZMK_TRANSPORT_USB;
+void zmk_endpoints_debug_override_transport(enum zmk_transport transport) {
+    debug_transport = transport;
+    debug_transport_override = true;
+    update_current_endpoint();
+}
+
+void zmk_endpoints_clear_debug_override(void) {
+    debug_transport_override = false;
+    update_current_endpoint();
+}
+
+static enum zmk_transport get_selected_transport(void) {
+    if (debug_transport_override) {
+        LOG_DBG("Using debug transport override: %d", debug_transport);
+        return debug_transport;
     }
 
     if (is_ble_ready()) {
-        LOG_DBG("Fallback to BLE.");
+        if (is_usb_ready()) {
+            LOG_DBG("Both endpoint transports are ready. Using %d", preferred_transport);
+            return preferred_transport;
+        }
+
+        LOG_DBG("Only BLE is ready.");
         return ZMK_TRANSPORT_BLE;
     }
 
     if (is_usb_ready()) {
-        LOG_DBG("Fallback to USB.");
+        LOG_DBG("Only USB is ready.");
         return ZMK_TRANSPORT_USB;
     }
 
