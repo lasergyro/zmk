@@ -34,6 +34,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include <zmk/events/sensor_event.h>
 #include <zmk/sensors.h>
+#include <zephyr/input/input.h>
 
 #if ZMK_KEYMAP_HAS_SENSORS
 static struct sensor_event last_sensor_event;
@@ -217,11 +218,15 @@ K_MSGQ_DEFINE(position_state_msgq, sizeof(char[POS_STATE_LEN]),
 void send_position_state_callback(struct k_work *work) {
     uint8_t state[POS_STATE_LEN];
 
-    while (k_msgq_get(&position_state_msgq, &state, K_NO_WAIT) == 0) {
+    while (k_msgq_peek(&position_state_msgq, &state) == 0) {
         int err = bt_gatt_notify(NULL, &split_svc.attrs[1], &state, sizeof(state));
-        if (err) {
+        if (err == -ENOMEM || err == -EAGAIN) {
+            k_work_submit_to_queue(&service_work_q, &service_position_notify_work);
+            return;
+        } else if (err) {
             LOG_DBG("Error notifying %d", err);
         }
+        k_msgq_get(&position_state_msgq, &state, K_NO_WAIT);
     }
 };
 
@@ -312,24 +317,74 @@ static int zmk_split_bt_sensor_triggered(uint8_t sensor_index,
 
 #if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
 
+static int32_t pending_rel_x = 0;
+static int32_t pending_rel_y = 0;
+static struct zmk_split_input_event_payload batch_buffer[2];
+static int batch_count = 0;
+
 static int zmk_split_bt_report_input(uint8_t reg, uint8_t type, uint16_t code, int32_t value,
                                      bool sync) {
 
+    // Inject accumulated values
+    if (type == INPUT_EV_REL) {
+        if (code == INPUT_REL_X) {
+            value += pending_rel_x;
+            pending_rel_x = 0;
+        } else if (code == INPUT_REL_Y) {
+            value += pending_rel_y;
+            pending_rel_y = 0;
+        }
+        
+        // Voluntarily drop to leave room for key events if position queue is busy
+        if (k_msgq_num_used_get(&position_state_msgq) > 0) {
+            if (code == INPUT_REL_X) pending_rel_x += value;
+            if (code == INPUT_REL_Y) pending_rel_y += value;
+            return -EBUSY;
+        }
+    }
+
+    struct zmk_split_input_event_payload payload = {
+        .type = type,
+        .code = code,
+        .value = value,
+        .sync = sync ? 1 : 0,
+    };
+
+    struct bt_gatt_attr *attr = NULL;
     for (size_t i = 0; i < split_svc.attr_count; i++) {
         if (bt_uuid_cmp(split_svc.attrs[i].uuid,
                         BT_UUID_DECLARE_128(ZMK_SPLIT_BT_INPUT_EVENT_UUID)) == 0 &&
             (uint8_t)(uint32_t)split_svc.attrs[i + 2].user_data == reg) {
-            struct zmk_split_input_event_payload payload = {
-                .type = type,
-                .code = code,
-                .value = value,
-                .sync = sync ? 1 : 0,
-            };
-
-            return bt_gatt_notify(NULL, &split_svc.attrs[i], &payload, sizeof(payload));
+            attr = &split_svc.attrs[i];
+            break;
         }
     }
-    return -ENODEV;
+
+    if (!attr) {
+        return -ENODEV;
+    }
+
+    batch_buffer[batch_count++] = payload;
+
+    if (sync || batch_count >= ARRAY_SIZE(batch_buffer)) {
+        int err = bt_gatt_notify(NULL, attr, batch_buffer, batch_count * sizeof(struct zmk_split_input_event_payload));
+        
+        if (err == -ENOMEM || err == -EAGAIN) {
+            for (int i = 0; i < batch_count; i++) {
+                if (batch_buffer[i].type == INPUT_EV_REL) {
+                    if (batch_buffer[i].code == INPUT_REL_X) pending_rel_x += batch_buffer[i].value;
+                    if (batch_buffer[i].code == INPUT_REL_Y) pending_rel_y += batch_buffer[i].value;
+                }
+            }
+        } else if (err) {
+            LOG_DBG("Error notifying %d", err);
+        }
+        
+        batch_count = 0;
+        return err;
+    }
+
+    return 0;
 }
 
 #endif /* IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT) */

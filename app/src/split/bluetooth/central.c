@@ -314,28 +314,31 @@ static uint8_t peripheral_input_event_notify_cb(struct bt_conn *conn,
 
     LOG_DBG("[INPUT EVENT] data %p length %u", data, length);
 
-    if (length != sizeof(struct zmk_split_input_event_payload)) {
+    if (length == 0 || length % sizeof(struct zmk_split_input_event_payload) != 0) {
         LOG_WRN("Ignoring input event notify with incorrect data length (%d)", length);
         return BT_GATT_ITER_STOP;
     }
 
-    struct zmk_split_input_event_payload payload;
-    memcpy(&payload, data, MIN(length, sizeof(struct zmk_split_input_event_payload)));
+    int count = length / sizeof(struct zmk_split_input_event_payload);
+    struct zmk_split_input_event_payload payloads[count];
+    memcpy(payloads, data, length);
 
     for (size_t i = 0; i < ARRAY_SIZE(peripheral_input_slots); i++) {
         if (&peripheral_input_slots[i].sub == params) {
-            struct peripheral_event_wrapper event_wrapper = {
-                .source = peripheral_slot_index_for_conn(conn),
-                .event = {.type = ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_INPUT_EVENT,
-                          .data = {.input_event = {
-                                       .reg = peripheral_input_slots[i].reg,
-                                       .sync = payload.sync,
-                                       .code = payload.code,
-                                       .type = payload.type,
-                                       .value = payload.value,
-                                   }}}};
+            for (int p = 0; p < count; p++) {
+                struct peripheral_event_wrapper event_wrapper = {
+                    .source = peripheral_slot_index_for_conn(conn),
+                    .event = {.type = ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_INPUT_EVENT,
+                              .data = {.input_event = {
+                                           .reg = peripheral_input_slots[i].reg,
+                                           .sync = payloads[p].sync,
+                                           .code = payloads[p].code,
+                                           .type = payloads[p].type,
+                                           .value = payloads[p].value,
+                                       }}}};
 
-            k_msgq_put(&peripheral_event_msgq, &event_wrapper, K_NO_WAIT);
+                k_msgq_put(&peripheral_event_msgq, &event_wrapper, K_NO_WAIT);
+            }
             k_work_submit(&peripheral_event_work);
             break;
         }
