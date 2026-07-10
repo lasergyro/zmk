@@ -337,6 +337,33 @@ int zmk_ble_prof_disconnect(uint8_t index) {
     return result;
 }
 
+int zmk_ble_prof_move(uint8_t from, uint8_t to) {
+    if (from >= ZMK_BLE_PROFILE_COUNT || to >= ZMK_BLE_PROFILE_COUNT) {
+        return -ERANGE;
+    }
+    if (from == to) {
+        return -EINVAL;
+    }
+    if (zmk_ble_profile_is_open(from)) {
+        return -ENOENT;
+    }
+    if (!zmk_ble_profile_is_open(to)) {
+        return -EEXIST;
+    }
+
+    LOG_DBG("Moving profile %d to %d", from, to);
+
+    bt_addr_le_t addr = profiles[from].peer;
+    set_profile_address(to, &addr);
+    set_profile_address(from, BT_ADDR_LE_ANY);
+
+    if (active_profile == from) {
+        zmk_ble_prof_select(to);
+    }
+
+    return 0;
+}
+
 bt_addr_le_t *zmk_ble_active_profile_addr(void) { return &profiles[active_profile].peer; }
 
 struct bt_conn *zmk_ble_active_profile_conn(void) {

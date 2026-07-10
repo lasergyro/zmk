@@ -26,6 +26,15 @@ int zmk_ble_prof_select(uint8_t index);
 void zmk_ble_clear_all_bonds(void);
 int zmk_ble_prof_disconnect(uint8_t index);
 
+/* Reassign profile `from`'s bonded peer to profile `to` (which must be
+ * open), then clear `from`. No new pairing/SMP handshake is needed since
+ * the peer's keys live in the Bluetooth host's bond store keyed by address,
+ * not by this profile index - `to` is immediately usable/reconnectable.
+ * If `from` was the active profile, `to` becomes active in its place.
+ * Returns -ERANGE for an out-of-range index, -EINVAL if from == to,
+ * -ENOENT if `from` has no bond to move, -EEXIST if `to` isn't open. */
+int zmk_ble_prof_move(uint8_t from, uint8_t to);
+
 int zmk_ble_active_profile_index(void);
 int zmk_ble_profile_index(const bt_addr_le_t *addr);
 bt_addr_le_t *zmk_ble_profile_address(uint8_t index);
